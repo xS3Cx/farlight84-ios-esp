@@ -1,0 +1,163 @@
+uintptr_t GetDebugCanvasObject()
+    {
+        static uintptr_t DebugCanvasObject = 0;
+        if ( !DebugCanvasObject )
+            DebugCanvasObject = FindObjec("DebugCanvasObject");
+
+        return DebugCanvasObject;
+    }
+
+    std::string GetName(uintptr_t Obj)
+{
+    std::string RawString = *(FName*)(Obj + 0x18).ToString();
+
+    size_t Pos = RawString.rfind('/');
+    if (Pos == std::string::npos)
+        return RawString;
+
+    return RawString.substr(Pos + 1);
+}
+ViewProjectionMatrix = Read<FMatrix>(DebugCanvas + 0x280);
+
+uintptr_t FindObjectFast(const std::string& Name)
+{
+    TUObjectArray ObjObjects = *(TUObjectArray*)(_dyld_get_vmslide_whatever(0) + 0x1089300f0);
+    for (int i = 0; i < ObjObjects.Num(); ++i)
+    {
+        uintptr_t Object = ObjObjects[i];
+        if (!Object)
+            continue;
+
+        if (GetName(Object) == Name)
+        {
+            return Object;
+        }
+    }
+    return 0;
+}
+struct FUObjectItem final
+{
+public:
+    uintptr_t Object;
+    int32_t Flags;   
+    int32_t ClusterIndex; 
+    int32_t SerialNumber; 
+    uint8_t Pad_14[0x4]; 
+
+public:
+    bool IsUnreachable() const
+    {
+        return !!(Flags & (1 << 28));
+    }
+
+    bool IsPendingKill() const
+    {
+        return !!(Flags & (1 << 29));
+    }
+};
+
+class TUObjectArray
+{
+public:
+    enum
+    {
+        NumElementsPerChunk = 64 * 1024,
+    };
+
+    FUObjectItem** Objects;
+    FUObjectItem* PreAllocatedObjects;
+    int32_t MaxElements;
+    int32_t NumElements;
+    int32_t MaxChunks;
+    int32_t NumChunks;
+
+public:
+    inline int32_t Num() const
+    {
+        return NumElements;
+    }
+
+    inline int32_t Capacity() const
+    {
+        return MaxElements;
+    }
+
+    inline bool IsValidIndex(int32_t Index) const
+    {
+        return Index < Num() && Index >= 0;
+    }
+
+    inline FUObjectItem const* IndexToObject(int32_t Index) const
+    {
+        const int32_t ChunkIndex = Index / NumElementsPerChunk;
+        const int32_t WithinChunkIndex = Index % NumElementsPerChunk;
+
+        if ( !IsValidIndex(Index) ) 
+            return nullptr;
+
+        if (ChunkIndex > NumChunks)
+            return nullptr;
+
+        if (Index > Capacity())
+            return nullptr;
+
+        FUObjectItem* Chunk = Objects[ChunkIndex];
+        if ( !Chunk )
+            return nullptr;
+
+        return reinterpret_cast<FUObjectItem*>(Chunk + WithinChunkIndex);
+    }
+
+    inline uintptr_t operator[](int32_t Index) const
+    {
+        FUObjectItem const* ObjectItem = IndexToObject(Index);
+        if ( ObjectItem )
+        {
+            return ObjectItem->Object;
+        }
+        return nullptr;
+    }
+};
+
+class FUObjectArray 
+{
+public:
+    int32_t ObjFirstGCIndex;
+    int32_t ObjLastNonGCIndex;
+    int32_t MaxObjectsNotConsideredByGC;
+    bool OpenForDisregardForGC;
+    uint8_t Pad[0x3];
+    TUObjectArray ObjObjects;
+};
+
+bool ProjectWorldToScreen(const FVector& WorldPosition, FVector2D& OutScreenPos, const FMatrix& VPM, bool bShouldCalcOutsideViewPosition) 
+{
+    /* VPM = ViewProjectionMatrix (member of UCanvas) */
+    float W = VPM.M[0][3] * WorldPosition.X + VPM.M[1][3] * WorldPosition.Y + VPM.M[2][3] * WorldPosition.Z + VPM.M[3][3];
+    
+    bool bIsInsideView = W > 0.0f;
+    
+    if ( !bIsInsideView )
+    {
+        if ( !bShouldCalcOutsideViewPosition )
+            return false;
+        
+        W = 0.01f;
+    }
+    
+    float X = VPM.M[0][0] * WorldPosition.X + VPM.M[1][0] * WorldPosition.Y + VPM.M[2][0] * WorldPosition.Z + VPM.M[3][0];
+    float Y = VPM.M[0][1] * WorldPosition.X + VPM.M[1][1] * WorldPosition.Y + VPM.M[2][1] * WorldPosition.Z + VPM.M[3][1];
+     
+    const float RHW = 1.0f / W;
+    float PosInScreenSpaceX = X * RHW;
+    float PosInScreenSpaceY = Y * RHW;
+
+    static const FVector2D HalfScreen(ScreenWidth / 2.0f, ScteenHeight / 2.0f);
+    
+    OutScreenPos.X = HalfScreen.X + (HalfScreen.X * PosInScreenSpaceX); 
+    OutScreenPos.Y = HalfScreen.Y - (HalfScreen.Y * PosInScreenSpaceY); 
+    
+    return bIsInsideView;
+}
+
+FName::InitManually((void*)(_dyld_get_vmslide(0) + 0x108798180));

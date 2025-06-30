@@ -1,0 +1,9 @@
+Package: bumm
+Name: DBDM Mod Menu
+Depends: mobilesubstrate
+Version: 1
+Architecture: iphoneos-arm
+Description: DBDM Mod Menu by Aloha and CRUEX!
+Maintainer: Aloha; CRUEX
+Author: Aloha; CRUEX
+Section: Tweaks

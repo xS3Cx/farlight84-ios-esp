@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "*.xm": "csharp",
+        "chrono": "cpp",
+        "thread": "cpp"
+    }
+}
